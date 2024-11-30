@@ -5,7 +5,7 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { setPokemons, deletePokemon } from '@/redux/slices/pokemonSlice';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 
-interface Pokemon {
+export interface Pokemon {
   name: string;
   url: string;
   image: string;
@@ -42,7 +42,7 @@ const PokemonListScreen = () => {
     try {
       const data = await fetchPokemonList();
       dispatch(setPokemons({ pokemons: data }));
-    } catch (err) {
+    } catch (err:any) {
       setError(err.message);
     } finally {
       setLoading(false);
