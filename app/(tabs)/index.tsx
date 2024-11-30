@@ -1,74 +1,126 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import { useAppSelector, useAppDispatch } from '@/redux/hooks';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, FlatList, RefreshControl, Image, Touchable, TouchableOpacity } from 'react-native';
+import { Text, ActivityIndicator } from 'react-native-paper';
+import { setPokemons, deletePokemon } from '@/redux/slices/pokemonSlice';
+import Animated, { LinearTransition } from 'react-native-reanimated';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+interface Pokemon {
+  name: string;
+  url: string;
+  image: string;
 }
 
+const fetchPokemonList = async (): Promise<Pokemon[]> => {
+  try {
+    const response = await fetch('https://pokeapi.co/api/v2/pokemon?limit=20');
+    const data = await response.json();
+    return data.results.map((pokemon: { name: string; url: string }) => ({
+      name: pokemon.name,
+      url: pokemon.url,
+      image: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${
+        pokemon.url.split('/')[6]
+      }.png`,
+    }));
+  } catch (error) {
+    throw new Error('Failed to fetch Pokémon');
+  }
+};
+
+const PokemonListScreen = () => {
+
+  const dispatch = useAppDispatch();
+  const { pokemons } = useAppSelector(state => state.pokemon);
+
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPokemonList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchPokemonList();
+      dispatch(setPokemons({ pokemons: data }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadPokemonList().finally(() => setRefreshing(false));
+  }, [loadPokemonList]);
+
+  useEffect(() => {
+    loadPokemonList();
+  }, [loadPokemonList]);
+
+  const renderItem = ({ item }: { item: Pokemon }) => (
+    <Animated.View layout={LinearTransition}>
+      <TouchableOpacity style={styles.itemContainer} onLongPress={()=>{
+        dispatch(deletePokemon({ name: item.name }));
+      }}>
+        <Text style={styles.pokemonName}>{item.name}</Text>
+        <Image source={{ uri: item.image }} style={styles.pokemonImage} />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+
+  return (
+    <View style={styles.container}>
+      {loading ? (
+        <ActivityIndicator animating={true} size="large" color="#0061fe" />
+      ) : error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : (
+        <FlatList
+          data={pokemons}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.name}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0061fe']} />
+          }
+        />
+      )}
+    </View>
+  );
+};
+
+
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
   },
-  stepContainer: {
-    gap: 8,
+  itemContainer: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 8,
+    alignItems: 'center',
+    borderColor: '#dddddd',
+    borderWidth: 1,
+  },
+  pokemonName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000000',
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  pokemonImage: {
+    width: 100,
+    height: 100,
+  },
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    fontSize: 16,
   },
 });
+
+export default PokemonListScreen;
